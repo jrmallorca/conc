@@ -18,6 +18,7 @@
  */
 
 pcb_t procTab[ MAX_PROCS ]; pcb_t* executing = NULL;
+int num_of_procs = 0;
 
 void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
   char prev_pid = '?', next_pid = '?';
@@ -44,28 +45,49 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
 }
 
 void schedule( ctx_t* ctx ) {
-  if     ( executing->pid == procTab[ 0 ].pid ) {
-    dispatch( ctx, &procTab[ 0 ], &procTab[ 1 ] );  // context switch P_3 -> P_4
+  pcb_t* prev;
+  pcb_t* next;
+  int priority = 0; // Priority = base priority + age
+  int max_priority = 0;
 
-    procTab[ 0 ].status = STATUS_READY;             // update   execution status  of P_3 
-    procTab[ 1 ].status = STATUS_EXECUTING;         // update   execution status  of P_4
+  // Find current process and process with highest priority
+  for(int i = 0; i < num_of_procs; i++) {
+    // Find current process
+    if(procTab[ i ].pid == executing->pid) {
+      prev = &procTab[ i ];
+    }
+
+    int priority = procTab[i].b_priority + procTab[i].age;
+
+    // Find process with highest priority and assign it as next process
+    if(max_priority <= priority) {
+      next = &procTab[ i ];
+      max_priority = priority;
+    }
   }
-  else if( executing->pid == procTab[ 1 ].pid ) {
-    dispatch( ctx, &procTab[ 1 ], &procTab[ 0 ] );  // context switch P_4 -> P_3
 
-    procTab[ 1 ].status = STATUS_READY;             // update   execution status  of P_4
-    procTab[ 0 ].status = STATUS_EXECUTING;         // update   execution status  of P_3
+  // Increase age of other processes in the ready queue
+  for(int i = 0; i < num_of_procs; i++) {
+    if(next->pid != procTab[i].pid && procTab[i].status == STATUS_READY) procTab[i].age++;
+    else procTab[i].age = 0;
   }
 
+  // Switch context
+  dispatch( ctx, prev, next );
+  prev->status = STATUS_READY;
+  next->status = STATUS_EXECUTING;
   return;
 }
 
-extern void     main_P3(); 
-extern uint32_t tos_P3;
-extern void     main_P4(); 
-extern uint32_t tos_P4;
+extern uint32_t tos_procs;
+extern void     main_P3();
+extern void     main_P4();
 
 void hilevel_handler_rst( ctx_t* ctx ) {
+  PL011_putc( UART0, '[', true );
+  PL011_putc( UART0, 'R', true );
+  PL011_putc( UART0, ']', true );
+
   /* Configure the mechanism for interrupt handling by
    *
    * - configuring timer st. it raises a (periodic) interrupt for each
@@ -91,7 +113,7 @@ void hilevel_handler_rst( ctx_t* ctx ) {
    */
 
   for( int i = 0; i < MAX_PROCS; i++ ) {
-  procTab[ i ].status = STATUS_INVALID;
+    procTab[ i ].status = STATUS_INVALID;
   }
 
   /* Automatically execute the user programs P3 and P4 by setting the fields
@@ -103,20 +125,26 @@ void hilevel_handler_rst( ctx_t* ctx ) {
    */
 
   memset( &procTab[ 0 ], 0, sizeof( pcb_t ) ); // initialise 0-th PCB = P_3
-  procTab[ 0 ].pid      = 1;
-  procTab[ 0 ].status   = STATUS_READY;
-  procTab[ 0 ].tos      = ( uint32_t )( &tos_P3  );
-  procTab[ 0 ].ctx.cpsr = 0x50;
-  procTab[ 0 ].ctx.pc   = ( uint32_t )( &main_P3 );
-  procTab[ 0 ].ctx.sp   = procTab[ 0 ].tos;
+  procTab[ 0 ].pid        = 1;
+  procTab[ 0 ].status     = STATUS_READY;
+  procTab[ 0 ].tos        = ( uint32_t )( &tos_procs );
+  procTab[ 0 ].ctx.cpsr   = 0x50;
+  procTab[ 0 ].ctx.pc     = ( uint32_t )( &main_P3 );
+  procTab[ 0 ].ctx.sp     = procTab[ 0 ].tos;
+  procTab[ 0 ].b_priority = 1;
+  procTab[ 0 ].age        = 0;
+  num_of_procs++;
 
   memset( &procTab[ 1 ], 0, sizeof( pcb_t ) ); // initialise 1-st PCB = P_4
-  procTab[ 1 ].pid      = 2;
-  procTab[ 1 ].status   = STATUS_READY;
-  procTab[ 1 ].tos      = ( uint32_t )( &tos_P4  );
-  procTab[ 1 ].ctx.cpsr = 0x50;
-  procTab[ 1 ].ctx.pc   = ( uint32_t )( &main_P4 );
-  procTab[ 1 ].ctx.sp   = procTab[ 1 ].tos;
+  procTab[ 1 ].pid        = 2;
+  procTab[ 1 ].status     = STATUS_READY;
+  procTab[ 1 ].tos        = ( uint32_t )( &tos_procs ) - 0x00001000;
+  procTab[ 1 ].ctx.cpsr   = 0x50;
+  procTab[ 1 ].ctx.pc     = ( uint32_t )( &main_P4 );
+  procTab[ 1 ].ctx.sp     = procTab[ 1 ].tos;
+  procTab[ 0 ].b_priority = 1;
+  procTab[ 0 ].age        = 0;
+  num_of_procs++;
 
   /* Once the PCBs are initialised, we arbitrarily select the 0-th PCB to be
    * executed: there is no need to preserve the execution context, since it
@@ -138,7 +166,9 @@ void hilevel_handler_irq( ctx_t* ctx ) {
   // Step 4: handle the interrupt, then clear (or reset) the source.
 
   if( id == GIC_SOURCE_TIMER0 ) {
+    PL011_putc( UART0, '[', true );
     PL011_putc( UART0, 'T', true );
+    PL011_putc( UART0, ']', true );
     schedule(ctx);
     TIMER0->Timer1IntClr = 0x01;
   }

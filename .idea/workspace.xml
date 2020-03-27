@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="b066caca-0500-4f08-ba8b-a487ca66dd36" name="Default Changelist" comment="" />
+    <list default="true" id="b066caca-0500-4f08-ba8b-a487ca66dd36" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -21,7 +23,7 @@
     <property name="WebServerToolWindowFactoryState" value="false" />
     <property name="aspect.path.notification.shown" value="true" />
     <property name="go.import.settings.migrated" value="true" />
-    <property name="last_opened_file_path" value="$PROJECT_DIR$" />
+    <property name="last_opened_file_path" value="$PROJECT_DIR$/question" />
     <property name="settings.editor.selected.configurable" value="preferences.pluginManager" />
   </component>
   <component name="SvnConfiguration">
@@ -35,6 +37,11 @@
       <option name="presentableId" value="Default" />
       <updated>1584038929073</updated>
       <workItem from="1584038931621" duration="686000" />
+      <workItem from="1585398669869" duration="642000" />
+      <workItem from="1585399466939" duration="228000" />
+      <workItem from="1585400635165" duration="12000" />
+      <workItem from="1585404196614" duration="69000" />
+      <workItem from="1585579684250" duration="617000" />
     </task>
     <servers />
   </component>
