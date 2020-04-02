@@ -40,7 +40,7 @@
  * - a type that captures a process PCB.
  */
 
-#define MAX_PROCS 2
+#define MAX_PROCS 20
 #define PROC_SIZE 0x00001000
 
 typedef int pid_t;
@@ -61,12 +61,13 @@ typedef struct {
 } ctx_t;
 
 typedef struct {
-     pid_t    pid; // Process IDentifier (PID)
-  status_t status; // current status
-  uint32_t    tos; // address of Top of Stack (ToS)
-     ctx_t    ctx; // execution context
-       int    b_priority; // base priority
-       int    age; // time spent waiting since last executed
+     pid_t        pid; // Process IDentifier (PID)
+  status_t     status; // current status
+  uint32_t        tos; // address of Top of Stack (ToS)
+     ctx_t        ctx; // execution context
+       int b_priority; // base priority
+       int        age; // time spent waiting since last executed
+       int   priority; // base priority + age
 } pcb_t;
 
 #endif

@@ -35,4 +35,22 @@ Processes now rely upon a general section of memory rather than being assigned t
 **Goal(s) achieved:**
 * Dynamically creates ( fork() ), executes ( exec() ) and terminates ( exit() ) processes.
 
-     
+fork() duplicates the currently executing process.
+We then exec() its child (by seeing if it returned 0 from fork()).
+If a process wants to exit(), we terminate the process.
+
+**Useful info:**
+* fork()
+    * Creates child PCB.
+    * Copies processing context and stack from parent to child.
+        * This can possibly be read-only, making it unnecessary to duplicate.
+    * Assigns correct position for child SP.
+    * Sets return values:
+        * Parent returns child PID.
+        * Child returns 0.
+* exec()
+    * Assigns entry point to the child PCB's PC in fork().
+    * Resets state (E.g. SP).
+* exit()
+    * Terminates process.
+    * Schedules another process.     

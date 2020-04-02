@@ -18,24 +18,14 @@
  */
 
 pcb_t procTab[ MAX_PROCS ]; pcb_t* executing = NULL;
-int num_of_procs = 0;
 
 // Get the next free PCB in process table
 pcb_t* get_free_pcb() {
-  for( int i = num_of_procs; i < MAX_PROCS; i++ ) {
+  for( int i = 0; i < MAX_PROCS; i++ ) {
     if( procTab[ i ].status == STATUS_INVALID ) return &procTab[ i ];
   }
 
   return NULL; // If no free PCB
-}
-
-// Get the created PCB in process table
-pcb_t* get_created_pcb() {
-  for( int i = 0; i < num_of_procs; i++ ) {
-    if( procTab[ i ].status == STATUS_CREATED ) return &procTab[ i ];
-  }
-
-  return NULL; // If no created PCB
 }
 
 void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
@@ -50,49 +40,45 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
     next_pid = '0' + next->pid;
   }
 
-    PL011_putc( UART0, '[',      true );
-    PL011_putc( UART0, prev_pid, true );
-    PL011_putc( UART0, '-',      true );
-    PL011_putc( UART0, '>',      true );
-    PL011_putc( UART0, next_pid, true );
-    PL011_putc( UART0, ']',      true );
+  PL011_putc( UART0, '[',      true );
+  PL011_putc( UART0, prev_pid, true );
+  PL011_putc( UART0, '-',      true );
+  PL011_putc( UART0, '>',      true );
+  PL011_putc( UART0, next_pid, true );
+  PL011_putc( UART0, ']',      true );
 
-    executing = next;                           // update   executing process to P_{next}
+  executing = next;                           // update   executing process to P_{next}
 
   return;
 }
 
 void schedule( ctx_t* ctx ) {
-  pcb_t* prev;
   pcb_t* next;
-  int priority = 0; // Priority = base priority + age
   int max_priority = 0;
 
-  // Find current process and process with highest priority
-  for(int i = 0; i < num_of_procs; i++) {
-    // Find current process
-    if(procTab[ i ].pid == executing->pid) {
-      prev = &procTab[ i ];
-    }
+  // Find process with highest priority and assign it as next process
+  for(int i = 0; i < MAX_PROCS; i++) {
+    if( procTab[ i ].status != STATUS_INVALID && procTab[ i ].status != STATUS_TERMINATED ) {
+      procTab[ i ].priority = procTab[i].b_priority + procTab[i].age;
 
-    int priority = procTab[i].b_priority + procTab[i].age;
-
-    // Find process with highest priority and assign it as next process
-    if(max_priority <= priority) {
-      next = &procTab[ i ];
-      max_priority = priority;
+      if( max_priority <= procTab[ i ].priority ) {
+        next = &procTab[ i ];
+        max_priority = procTab[ i ].priority;
+      }
     }
   }
 
   // Increase age of other processes in the ready queue
-  for(int i = 0; i < num_of_procs; i++) {
-    if(next->pid != procTab[i].pid && procTab[i].status == STATUS_READY) procTab[i].age++;
-    else procTab[i].age = 0;
+  for(int i = 0; i < MAX_PROCS; i++) {
+    if( procTab[ i ].status != STATUS_INVALID && procTab[ i ].status != STATUS_TERMINATED ) {
+      if( next->pid != procTab[i].pid ) procTab[i].age++;
+      else procTab[i].age = 0;
+    }
   }
 
   // Switch context
-  dispatch( ctx, prev, next );
-  prev->status = STATUS_READY;
+  dispatch( ctx, executing, next );
+  executing->status = STATUS_READY;
   next->status = STATUS_EXECUTING;
   return;
 }
@@ -143,17 +129,17 @@ void hilevel_handler_rst( ctx_t* ctx ) {
   procTab[ 0 ].ctx.sp     = procTab[ 0 ].tos;
   procTab[ 0 ].b_priority = 1;
   procTab[ 0 ].age        = 0;
-  num_of_procs++;
+  procTab[ 0 ].priority   = 1;
 
   /* Invalidate all other entries in the process table, so it's clear they are not
    * representing valid (i.e., active) processes.
    */
 
-  for( int i = num_of_procs; i < MAX_PROCS; i++ ) {
+  for( int i = 1; i < MAX_PROCS; i++ ) {
     memset( &procTab[ i ], 0, sizeof( pcb_t ) );
-    procTab[ i ].pid      = i;
-    procTab[ i ].status   = STATUS_INVALID;
-    procTab[ i ].ctx.cpsr = 0x50;
+    procTab[ i ].pid        = i;
+    procTab[ i ].status     = STATUS_INVALID;
+    procTab[ i ].tos        = ( uint32_t )( &tos_procs ) - (i * PROC_SIZE);
   }
 
   /* Once the PCBs are initialised, we arbitrarily select the 0-th PCB to be
@@ -239,26 +225,25 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       // Copy context from parent PCB to child PCB
       memcpy( &child_pcb->ctx, ctx, sizeof(ctx_t));
 
-      // Calculate offset for the stack and sp for child PCB
+      // Copy stack from parent PCB to child PCB
+      // memcpy() works from the bottom up
+      uint32_t parent_stack = executing->tos - PROC_SIZE;
+      uint32_t child_stack  = child_pcb->tos - PROC_SIZE;
+      memcpy( ( void* ) child_stack, ( void* ) parent_stack, PROC_SIZE );
+
+      // Calculate offset for the sp of child PCB
       uint32_t offset = (uint32_t)( &executing->tos - ctx->sp );
 
       // Set the attributes
       child_pcb->status     = STATUS_CREATED;
-      child_pcb->tos        = ( uint32_t )( &tos_procs ) - (child_pcb->pid * PROC_SIZE);
       child_pcb->ctx.sp     = child_pcb->tos - offset;
       child_pcb->b_priority = 1;
       child_pcb->age        = 0;
-      num_of_procs++;
-
-      // Copy stack
-      // memcpy() works from the bottom up
-      uint32_t parent_stack = executing->tos - PROC_SIZE;
-      uint32_t child_stack = child_pcb->tos - PROC_SIZE;
-      memcpy( ( void* ) child_stack, ( void* ) parent_stack, PROC_SIZE );
+      child_pcb->priority   = 1;
 
       // Set return values
-      ctx->gpr[0] = child_pcb->pid; // Return value for parent
-      child_pcb->ctx.gpr[0] = 0; // Return value for child
+      ctx->gpr[0]           = child_pcb->pid; // Return value for parent
+      child_pcb->ctx.gpr[0] = 0;              // Return value for child
 
       break;
     }
@@ -286,14 +271,13 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       PL011_putc( UART0, 'C', true );
       PL011_putc( UART0, ']', true );
 
-      // Entry point (E.g. &main_P3)
+      // Entry point of process (E.g. &main_P3)
       uint32_t addr = ( uint32_t )( ctx->gpr[ 0 ] );
 
       // Set attributes
-      pcb_t* created_pcb = get_created_pcb();
-      created_pcb->status = STATUS_READY;
-      created_pcb->ctx.pc = addr;
-      created_pcb->ctx.sp = created_pcb->tos;
+      ctx->pc = addr;
+      ctx->sp = executing->tos;
+
       break;
     }
     case 0x06 : { // 0x06 => kill( pid, SIG_TERM )
