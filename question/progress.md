@@ -23,7 +23,6 @@ It doesn't rely on the yield() function in order to switch programs. It automati
 
 Processes now rely upon a general section of memory rather than being assigned their own.
 
-
 **Useful info:**
 * Here are the reasons for using a scheduling algorithm:
      * The CPU uses scheduling to improve its efficiency.
@@ -31,4 +30,9 @@ Processes now rely upon a general section of memory rather than being assigned t
      * The maximum utilization of CPU can be obtained with multi-programming.
      * The processes which are to be executed are in ready queue.
 * STATE ADVANTAGES OF ROUND ROBIN WITH PRIORITY AND AGE
+
+## Stage 2a
+**Goal(s) achieved:**
+* Dynamically creates ( fork() ), executes ( exec() ) and terminates ( exit() ) processes.
+
      

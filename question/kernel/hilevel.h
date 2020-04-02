@@ -41,6 +41,7 @@
  */
 
 #define MAX_PROCS 2
+#define PROC_SIZE 0x00001000
 
 typedef int pid_t;
 

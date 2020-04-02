@@ -20,6 +20,24 @@
 pcb_t procTab[ MAX_PROCS ]; pcb_t* executing = NULL;
 int num_of_procs = 0;
 
+// Get the next free PCB in process table
+pcb_t* get_free_pcb() {
+  for( int i = num_of_procs; i < MAX_PROCS; i++ ) {
+    if( procTab[ i ].status == STATUS_INVALID ) return &procTab[ i ];
+  }
+
+  return NULL; // If no free PCB
+}
+
+// Get the created PCB in process table
+pcb_t* get_created_pcb() {
+  for( int i = 0; i < num_of_procs; i++ ) {
+    if( procTab[ i ].status == STATUS_CREATED ) return &procTab[ i ];
+  }
+
+  return NULL; // If no created PCB
+}
+
 void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
   char prev_pid = '?', next_pid = '?';
 
@@ -80,8 +98,10 @@ void schedule( ctx_t* ctx ) {
 }
 
 extern uint32_t tos_procs;
-extern void     main_P3();
-extern void     main_P4();
+extern void main_console();
+
+// -------------------------------------------------------------------------------------------------------------------
+// Hilevel handlers
 
 void hilevel_handler_rst( ctx_t* ctx ) {
   PL011_putc( UART0, '[', true );
@@ -108,43 +128,33 @@ void hilevel_handler_rst( ctx_t* ctx ) {
   GICC0->CTLR         = 0x00000001; // enable GIC interface
   GICD0->CTLR         = 0x00000001; // enable GIC distributor
 
-  /* Invalidate all entries in the process table, so it's clear they are not
-   * representing valid (i.e., active) processes.
-   */
-
-  for( int i = 0; i < MAX_PROCS; i++ ) {
-    procTab[ i ].status = STATUS_INVALID;
-  }
-
-  /* Automatically execute the user programs P3 and P4 by setting the fields
-   * in two associated PCBs.  Note in each case that
-   *
+  /* Initialise the console. Note that:
    * - the CPSR value of 0x50 means the processor is switched into USR mode,
    *   with IRQ interrupts enabled, and
    * - the PC and SP values match the entry point and top of stack.
    */
 
-  memset( &procTab[ 0 ], 0, sizeof( pcb_t ) ); // initialise 0-th PCB = P_3
-  procTab[ 0 ].pid        = 1;
+  memset( &procTab[ 0 ], 0, sizeof( pcb_t ) ); // initialise 0-th PCB = console
+  procTab[ 0 ].pid        = 0;
   procTab[ 0 ].status     = STATUS_READY;
   procTab[ 0 ].tos        = ( uint32_t )( &tos_procs );
   procTab[ 0 ].ctx.cpsr   = 0x50;
-  procTab[ 0 ].ctx.pc     = ( uint32_t )( &main_P3 );
+  procTab[ 0 ].ctx.pc     = ( uint32_t )( &main_console );
   procTab[ 0 ].ctx.sp     = procTab[ 0 ].tos;
   procTab[ 0 ].b_priority = 1;
   procTab[ 0 ].age        = 0;
   num_of_procs++;
 
-  memset( &procTab[ 1 ], 0, sizeof( pcb_t ) ); // initialise 1-st PCB = P_4
-  procTab[ 1 ].pid        = 2;
-  procTab[ 1 ].status     = STATUS_READY;
-  procTab[ 1 ].tos        = ( uint32_t )( &tos_procs ) - 0x00001000;
-  procTab[ 1 ].ctx.cpsr   = 0x50;
-  procTab[ 1 ].ctx.pc     = ( uint32_t )( &main_P4 );
-  procTab[ 1 ].ctx.sp     = procTab[ 1 ].tos;
-  procTab[ 0 ].b_priority = 1;
-  procTab[ 0 ].age        = 0;
-  num_of_procs++;
+  /* Invalidate all other entries in the process table, so it's clear they are not
+   * representing valid (i.e., active) processes.
+   */
+
+  for( int i = num_of_procs; i < MAX_PROCS; i++ ) {
+    memset( &procTab[ i ], 0, sizeof( pcb_t ) );
+    procTab[ i ].pid      = i;
+    procTab[ i ].status   = STATUS_INVALID;
+    procTab[ i ].ctx.cpsr = 0x50;
+  }
 
   /* Once the PCBs are initialised, we arbitrarily select the 0-th PCB to be
    * executed: there is no need to preserve the execution context, since it
@@ -169,7 +179,8 @@ void hilevel_handler_irq( ctx_t* ctx ) {
     PL011_putc( UART0, '[', true );
     PL011_putc( UART0, 'T', true );
     PL011_putc( UART0, ']', true );
-    schedule(ctx);
+
+    schedule( ctx );
     TIMER0->Timer1IntClr = 0x01;
   }
 
@@ -189,18 +200,103 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
    * - write any return value back to preserved usr mode registers.
    */
 
+  // #define SYS_YIELD     ( 0x00 )
+  // #define SYS_WRITE     ( 0x01 )
+  // #define SYS_READ      ( 0x02 )
+  // #define SYS_FORK      ( 0x03 )
+  // #define SYS_EXIT      ( 0x04 )
+  // #define SYS_EXEC      ( 0x05 )
+  // #define SYS_KILL      ( 0x06 )
+  // #define SYS_NICE      ( 0x07 )
+
   switch( id ) {
     case 0x01 : { // 0x01 => write( fd, x, n )
       int   fd = ( int   )( ctx->gpr[ 0 ] );
       char*  x = ( char* )( ctx->gpr[ 1 ] );
       int    n = ( int   )( ctx->gpr[ 2 ] );
 
+      // Print
       for( int i = 0; i < n; i++ ) {
         PL011_putc( UART0, *x++, true );
       }
 
+      // Set return values
       ctx->gpr[ 0 ] = n;
 
+      break;
+    }
+    case 0x03 : { // 0x03 -> fork()
+      PL011_putc( UART0, '[', true );
+      PL011_putc( UART0, 'F', true );
+      PL011_putc( UART0, ']', true );
+
+      // Get a free PCB in the process table
+      pcb_t* child_pcb = get_free_pcb();
+
+      // If there's no free PCB left, return
+      if( child_pcb == NULL ) break;
+
+      // Copy context from parent PCB to child PCB
+      memcpy( &child_pcb->ctx, ctx, sizeof(ctx_t));
+
+      // Calculate offset for the stack and sp for child PCB
+      uint32_t offset = (uint32_t)( &executing->tos - ctx->sp );
+
+      // Set the attributes
+      child_pcb->status     = STATUS_CREATED;
+      child_pcb->tos        = ( uint32_t )( &tos_procs ) - (child_pcb->pid * PROC_SIZE);
+      child_pcb->ctx.sp     = child_pcb->tos - offset;
+      child_pcb->b_priority = 1;
+      child_pcb->age        = 0;
+      num_of_procs++;
+
+      // Copy stack
+      // memcpy() works from the bottom up
+      uint32_t parent_stack = executing->tos - PROC_SIZE;
+      uint32_t child_stack = child_pcb->tos - PROC_SIZE;
+      memcpy( ( void* ) child_stack, ( void* ) parent_stack, PROC_SIZE );
+
+      // Set return values
+      ctx->gpr[0] = child_pcb->pid; // Return value for parent
+      child_pcb->ctx.gpr[0] = 0; // Return value for child
+
+      break;
+    }
+    case 0x04 : { // 0x04 => exit( status )
+      PL011_putc( UART0, '[', true );
+      PL011_putc( UART0, 'E', true );
+      PL011_putc( UART0, 'X', true );
+      PL011_putc( UART0, 'I', true );
+      PL011_putc( UART0, 'T', true );
+      PL011_putc( UART0, ']', true );
+
+      // Indicate that the current process has been terminated
+      executing->status = STATUS_TERMINATED;
+
+      // Schedule another process
+      schedule( ctx );
+
+      break;
+    }
+    case 0x05 : { // 0x05 => exec( addr )
+      PL011_putc( UART0, '[', true );
+      PL011_putc( UART0, 'E', true );
+      PL011_putc( UART0, 'X', true );
+      PL011_putc( UART0, 'E', true );
+      PL011_putc( UART0, 'C', true );
+      PL011_putc( UART0, ']', true );
+
+      // Entry point (E.g. &main_P3)
+      uint32_t addr = ( uint32_t )( ctx->gpr[ 0 ] );
+
+      // Set attributes
+      pcb_t* created_pcb = get_created_pcb();
+      created_pcb->status = STATUS_READY;
+      created_pcb->ctx.pc = addr;
+      created_pcb->ctx.sp = created_pcb->tos;
+      break;
+    }
+    case 0x06 : { // 0x06 => kill( pid, SIG_TERM )
       break;
     }
 
