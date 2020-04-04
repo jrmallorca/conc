@@ -122,7 +122,7 @@ void hilevel_handler_rst( ctx_t* ctx ) {
 
   memset( &procTab[ 0 ], 0, sizeof( pcb_t ) ); // initialise 0-th PCB = console
   procTab[ 0 ].pid        = 0;
-  procTab[ 0 ].status     = STATUS_READY;
+  procTab[ 0 ].status     = STATUS_CREATED;
   procTab[ 0 ].tos        = ( uint32_t )( &tos_procs );
   procTab[ 0 ].ctx.cpsr   = 0x50;
   procTab[ 0 ].ctx.pc     = ( uint32_t )( &main_console );
@@ -136,7 +136,6 @@ void hilevel_handler_rst( ctx_t* ctx ) {
    */
 
   for( int i = 1; i < MAX_PROCS; i++ ) {
-    memset( &procTab[ i ], 0, sizeof( pcb_t ) );
     procTab[ i ].pid        = i;
     procTab[ i ].status     = STATUS_INVALID;
     procTab[ i ].tos        = ( uint32_t )( &tos_procs ) - (i * PROC_SIZE);
@@ -234,7 +233,8 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       // Calculate offset for the sp of child PCB
       uint32_t offset = (uint32_t)( &executing->tos - ctx->sp );
 
-      // Set the attributes
+      // Create PCB and set the attributes
+      memset( child_pcb, 0, sizeof( pcb_t ) );
       child_pcb->status     = STATUS_CREATED;
       child_pcb->ctx.sp     = child_pcb->tos - offset;
       child_pcb->b_priority = 1;
