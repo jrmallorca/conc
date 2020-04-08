@@ -7,6 +7,8 @@
 
 #include "hilevel.h"
 
+// nc 127.0.0.1 1235
+
 /* We assume there will be two user processes, stemming from execution of the 
  * two user programs P3 and P4, and can therefore
  * 
@@ -19,13 +21,16 @@
 
 pcb_t procTab[ MAX_PROCS ]; pcb_t* executing = NULL;
 
+extern uint32_t tos_procs;
+extern void main_console();
+
 // Get the next free PCB in process table
-pcb_t* get_free_pcb() {
+int get_free_pcb_index() {
   for( int i = 0; i < MAX_PROCS; i++ ) {
-    if( procTab[ i ].status == STATUS_INVALID ) return &procTab[ i ];
+    if( procTab[ i ].status == STATUS_INVALID || procTab[ i ].status == STATUS_TERMINATED ) return i;
   }
 
-  return NULL; // If no free PCB
+  return -1; // If no free PCB
 }
 
 void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
@@ -47,7 +52,7 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
   PL011_putc( UART0, next_pid, true );
   PL011_putc( UART0, ']',      true );
 
-  executing = next;                           // update   executing process to P_{next}
+  executing = next;                             // update   executing process to P_{next}
 
   return;
 }
@@ -82,9 +87,6 @@ void schedule( ctx_t* ctx ) {
   next->status = STATUS_EXECUTING;
   return;
 }
-
-extern uint32_t tos_procs;
-extern void main_console();
 
 // -------------------------------------------------------------------------------------------------------------------
 // Hilevel handlers
@@ -136,9 +138,7 @@ void hilevel_handler_rst( ctx_t* ctx ) {
    */
 
   for( int i = 1; i < MAX_PROCS; i++ ) {
-    procTab[ i ].pid        = i;
-    procTab[ i ].status     = STATUS_INVALID;
-    procTab[ i ].tos        = ( uint32_t )( &tos_procs ) - (i * PROC_SIZE);
+    procTab[ i ].status = STATUS_INVALID;
   }
 
   /* Once the PCBs are initialised, we arbitrarily select the 0-th PCB to be
@@ -180,7 +180,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
   /* Based on the identifier (i.e., the immediate operand) extracted from the
    * svc instruction,
    *
-   * - read  the arguments from preserved usr mode registers,
+   * - read the arguments from preserved usr mode registers,
    * - perform whatever is appropriate for this system call, then
    * - write any return value back to preserved usr mode registers.
    */
@@ -195,6 +195,11 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
   // #define SYS_NICE      ( 0x07 )
 
   switch( id ) {
+    case 0x00 : { // 0x00 => yield()
+      schedule( ctx );
+
+      break;
+    }
     case 0x01 : { // 0x01 => write( fd, x, n )
       int   fd = ( int   )( ctx->gpr[ 0 ] );
       char*  x = ( char* )( ctx->gpr[ 1 ] );
@@ -215,11 +220,12 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       PL011_putc( UART0, 'F', true );
       PL011_putc( UART0, ']', true );
 
-      // Get a free PCB in the process table
-      pcb_t* child_pcb = get_free_pcb();
+      int idx = get_free_pcb_index();     // Get index of free PCB in the process table
+      if( idx == -1 ) break;              // If there's no free PCB left, return
+      pcb_t* child_pcb = &procTab[ idx ]; // Get PCB
 
-      // If there's no free PCB left, return
-      if( child_pcb == NULL ) break;
+      // Reset contents of PCB
+      memset( child_pcb, 0, sizeof( pcb_t ) );
 
       // Copy context from parent PCB to child PCB
       memcpy( &child_pcb->ctx, ctx, sizeof(ctx_t));
@@ -231,11 +237,12 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       memcpy( ( void* ) child_stack, ( void* ) parent_stack, PROC_SIZE );
 
       // Calculate offset for the sp of child PCB
-      uint32_t offset = (uint32_t)( &executing->tos - ctx->sp );
+      uint32_t offset = (uint32_t)( executing->tos - ctx->sp );
 
       // Create PCB and set the attributes
-      memset( child_pcb, 0, sizeof( pcb_t ) );
+      child_pcb->pid        = idx;
       child_pcb->status     = STATUS_CREATED;
+      child_pcb->tos        = ( uint32_t )( &tos_procs ) - (idx * PROC_SIZE);
       child_pcb->ctx.sp     = child_pcb->tos - offset;
       child_pcb->b_priority = 1;
       child_pcb->age        = 0;
@@ -254,6 +261,9 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       PL011_putc( UART0, 'I', true );
       PL011_putc( UART0, 'T', true );
       PL011_putc( UART0, ']', true );
+
+      // Reset contents of PCB
+      memset( executing, 0, sizeof( pcb_t ) );
 
       // Indicate that the current process has been terminated
       executing->status = STATUS_TERMINATED;

@@ -15,14 +15,17 @@ SECTIONS {
   /* place bss  segment(s)           */        
   .bss  : {                         *(.bss         ) }
   /* align       address (per AAPCS) */
-  .       = ALIGN( 8 );        
+  .          = ALIGN( 8 );
   /* allocate stack for irq mode     */
-  .       = . + 0x00001000;  
-  tos_irq = .;
+  .          = . + 0x00001000;
+  tos_irq    = .;
   /* allocate stack for svc mode     */
-  .       = . + 0x00001000;  
-  tos_svc = .;
+  .          = . + 0x00001000;
+  tos_svc    = .;
   /* allocate stack for 20 processes */
-  .       = . + 0x00014000;
+  .          = . + 0x00014000;
   tos_procs  = .;
+  /* allocate shared memory region */
+  .          = . + 0x00001000;
+  shm        = .;
 }

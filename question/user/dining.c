@@ -9,26 +9,48 @@
    4.
 */
 
-// Use shm_open, mmap, etc. for shared resources (chopsticks)
+extern uint32_t shm; // Address to shared memory
+uint32_t offset;     // Size of shared memory
 
-int id;
+// Allocate n-byte shared memory region
+void shm_open( uint32_t size ) {
+  offset = size;
+  memset( &shm - size, 0, size );
+}
+
+// Return pointer to shared memory
+void* mmap() {
+  return &shm - offset;
+}
 
 void main_dining() {
-  // Create chopsticks
+  // Allocate memory for array of chopsticks to share
+  shm_open( sizeof( chopstick ) * PHILOSOPHERS );
+
+  // Create 16 philosophers
   for( int i = 0; i < PHILOSOPHERS; i++ ) {
-    chopsticks[ i ].state = DIRTY;
-  }
+    if( 0 == fork() ) {
+      // Assign ID
+      int id = i;
+      char p[2];
+      itoa( p, id );
 
-  // Assign id for 1st philosopher
-  id = 0;
+      // Assign pointer to shared resource
+      chopstick* chopsticks = mmap();
 
-  // Create 15 child philosophers
-  for( int i = 1; i < PHILOSOPHERS; i++ ) {
-    if( fork() == 0 ) {
-      id = i;
+      // Forever cycle between thinking, hungry and eating.
+      while(1) {
+        if( chopsticks[id].state == CLEAN ) chopsticks[id].state = DIRTY;
+        else chopsticks[id].state = CLEAN;
+
+        write( STDOUT_FILENO, "Philosopher ", 12);
+        write( STDOUT_FILENO, p, 2);
+        write( STDOUT_FILENO, " is thinking\n", 13 );
+
+        yield();
+      }
     }
   }
 
-  while(1) {
-  }
+  exit( EXIT_SUCCESS );
 }
