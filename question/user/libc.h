@@ -30,24 +30,27 @@ typedef int pid_t;
  * to act as a limited model of similar concepts.
  */
 
-#define SYS_YIELD     ( 0x00 )
-#define SYS_WRITE     ( 0x01 )
-#define SYS_READ      ( 0x02 )
-#define SYS_FORK      ( 0x03 )
-#define SYS_EXIT      ( 0x04 )
-#define SYS_EXEC      ( 0x05 )
-#define SYS_KILL      ( 0x06 )
-#define SYS_NICE      ( 0x07 )
+#define SYS_YIELD      ( 0x00 )
+#define SYS_WRITE      ( 0x01 )
+#define SYS_READ       ( 0x02 )
+#define SYS_FORK       ( 0x03 )
+#define SYS_EXIT       ( 0x04 )
+#define SYS_EXEC       ( 0x05 )
+#define SYS_KILL       ( 0x06 )
+#define SYS_NICE       ( 0x07 )
+#define SYS_SHM_OPEN   ( 0x08 )
+#define SYS_MMAP       ( 0x09 )
+#define SYS_SHM_UNLINK ( 0x0A )
 
-#define SIG_TERM      ( 0x00 )
-#define SIG_QUIT      ( 0x01 )
+#define SIG_TERM       ( 0x00 )
+#define SIG_QUIT       ( 0x01 )
 
-#define EXIT_SUCCESS  ( 0 )
-#define EXIT_FAILURE  ( 1 )
+#define EXIT_SUCCESS   ( 0 )
+#define EXIT_FAILURE   ( 1 )
 
-#define  STDIN_FILENO ( 0 )
-#define STDOUT_FILENO ( 1 )
-#define STDERR_FILENO ( 2 )
+#define  STDIN_FILENO  ( 0 )
+#define STDOUT_FILENO  ( 1 )
+#define STDERR_FILENO  ( 2 )
 
 // convert ASCII string x into integer r
 extern int  atoi( char* x        );
@@ -73,5 +76,12 @@ extern void exec( const void* x );
 extern int  kill( pid_t pid, int x );
 // for process identified by pid, set  priority to x
 extern void nice( pid_t pid, int x );
+
+// allocate n-byte shared memory region and return file descriptor
+extern int shm_open( uint32_t size );
+// return pointer to shared memory
+extern void* mmap( int fd );
+// deallocate n-byte shared memory region
+extern void shm_unlink( int fd );
 
 #endif

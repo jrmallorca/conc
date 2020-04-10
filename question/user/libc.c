@@ -147,3 +147,39 @@ void nice( int pid, int x ) {
 
   return;
 }
+
+int shm_open( uint32_t size ) {
+  int r;
+
+  asm volatile( "mov r0, %1 \n" // assign r0 = size
+                "svc %1     \n" // make system call SYS_SHM_OPEN
+                "mov %0, r0 \n" // assign r  = r0 
+              : "=r" (r) 
+              : "I" (SYS_SHM_OPEN), "r" (size)
+              : "r0" );
+
+  return r;
+}
+
+void* mmap( int fd ) {
+  int r;
+
+  asm volatile( "mov r0, %1 \n" // assign r0 =   fd
+                "svc %1     \n" // make system call SYS_MMAP
+                "mov %0, r0 \n" // assign r  = r0 
+              : "=r" (r) 
+              : "I" (SYS_MMAP), "r" (fd)
+              : "r0" );
+
+  return ( void* ) r;
+}
+
+void shm_unlink( int fd ) {
+  asm volatile( "mov r0, %1 \n" // assign r0 =   fd
+                "svc %0     \n" // make system call SYS_SHM_UNLINK
+              :  
+              : "I" (SYS_SHM_UNLINK), "r" (fd)
+              : "r0" );
+
+  return;
+}

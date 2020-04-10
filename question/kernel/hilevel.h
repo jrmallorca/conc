@@ -40,6 +40,22 @@
  * - a type that captures a process PCB.
  */
 
+extern uint32_t shm; // Address to shared memory
+
+#define MAX_SHM 20
+
+typedef enum {
+  UNOCCUPIED,
+  OCCUPIED
+} vacancy;
+
+typedef struct {
+  int fd;
+  uint32_t offset;
+  uint32_t size;
+  vacancy state;
+} region;
+
 #define MAX_PROCS 20
 #define PROC_SIZE 0x00001000
 

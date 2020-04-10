@@ -26,6 +26,6 @@ SECTIONS {
   .          = . + 0x00014000;
   tos_procs  = .;
   /* allocate shared memory region */
-  .          = . + 0x00001000;
+  .          = . + 0x00002000;
   shm        = .;
 }

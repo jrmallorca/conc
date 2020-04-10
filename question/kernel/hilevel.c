@@ -24,6 +24,15 @@ pcb_t procTab[ MAX_PROCS ]; pcb_t* executing = NULL;
 extern uint32_t tos_procs;
 extern void main_console();
 
+region regions[ MAX_SHM ] = { 0 };
+
+int get_free_region_index() {
+  int i = 0;
+  while( regions[ i ].state == OCCUPIED ) { i++; }
+
+  return i;
+} 
+
 // Get the next free PCB in process table
 int get_free_pcb_index() {
   for( int i = 0; i < MAX_PROCS; i++ ) {
@@ -51,6 +60,7 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
   PL011_putc( UART0, '>',      true );
   PL011_putc( UART0, next_pid, true );
   PL011_putc( UART0, ']',      true );
+  PL011_putc( UART0, '\n',     true );
 
   executing = next;                             // update   executing process to P_{next}
 
@@ -185,15 +195,6 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
    * - write any return value back to preserved usr mode registers.
    */
 
-  // #define SYS_YIELD     ( 0x00 )
-  // #define SYS_WRITE     ( 0x01 )
-  // #define SYS_READ      ( 0x02 )
-  // #define SYS_FORK      ( 0x03 )
-  // #define SYS_EXIT      ( 0x04 )
-  // #define SYS_EXEC      ( 0x05 )
-  // #define SYS_KILL      ( 0x06 )
-  // #define SYS_NICE      ( 0x07 )
-
   switch( id ) {
     case 0x00 : { // 0x00 => yield()
       schedule( ctx );
@@ -220,15 +221,19 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       PL011_putc( UART0, 'F', true );
       PL011_putc( UART0, ']', true );
 
-      int idx = get_free_pcb_index();     // Get index of free PCB in the process table
-      if( idx == -1 ) break;              // If there's no free PCB left, return
-      pcb_t* child_pcb = &procTab[ idx ]; // Get PCB
+      // Get PCB
+      int idx = get_free_pcb_index();
+      if( idx == -1 ) { // If there's no free PCB left, return
+        ctx->gpr[0] = -1;
+        break;
+      }
+      pcb_t* child_pcb = &procTab[ idx ];
 
       // Reset contents of PCB
       memset( child_pcb, 0, sizeof( pcb_t ) );
 
       // Copy context from parent PCB to child PCB
-      memcpy( &child_pcb->ctx, ctx, sizeof(ctx_t));
+      memcpy( &child_pcb->ctx, ctx, sizeof( ctx_t ) );
 
       // Copy stack from parent PCB to child PCB
       // memcpy() works from the bottom up
@@ -264,11 +269,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
 
       // Reset contents of PCB
       memset( executing, 0, sizeof( pcb_t ) );
-
-      // Indicate that the current process has been terminated
       executing->status = STATUS_TERMINATED;
-
-      // Schedule another process
       schedule( ctx );
 
       break;
@@ -290,7 +291,46 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
 
       break;
     }
-    case 0x06 : { // 0x06 => kill( pid, SIG_TERM )
+    case 0x06 : { // 0x06 => kill( pid )
+      PL011_putc( UART0, '[', true );
+      PL011_putc( UART0, 'K', true );
+      PL011_putc( UART0, ']', true );
+
+      pcb_t* target = &procTab( ( pid_t ) ctx->gpr[0] );
+      if( target != NULL) {
+        memset( executing, 0, sizeof( pcb_t ) );
+        target->status = STATUS_TERMINATED;
+      }
+
+      break;
+    }
+    case 0x08 : { // 0x08 => shm_open( uint32_t size )
+      uint32_t size = ( uint32_t )( ctx->gpr[ 0 ] );
+
+      // Find unoccupied region
+      int i = get_free_region_index();
+      region* r = &regions[ i ];
+    
+      // Set attributes
+      r->fd     = i;
+      r->offset = ( i != 0 ) ? ( regions[ i - 1 ].offset - size ) : ( (uint32_t) ( &shm - size ) );
+      r->size   = size;
+      r->state  = OCCUPIED;
+    
+      // Set shared memory region
+      memset( ( void* ) r->offset, 0, size );
+    
+      ctx->gpr[0] = i;
+      break;
+    }
+    case 0x09 : { // 0x09 => mmap( int fd )
+      int fd = ( int )( ctx->gpr[ 0 ] );
+      ctx->gpr[0] = regions[ fd ].offset;
+      break;
+    }
+    case 0x0A : { // 0x0A => shm_unlink( int fd )
+      int fd = ( int )( ctx->gpr[ 0 ] );
+      memset( ( void* ) regions[ fd ].offset, 0, regions[ fd ].size );
       break;
     }
 
