@@ -84,4 +84,11 @@ extern void* mmap( int fd );
 // deallocate n-byte shared memory region
 extern void shm_unlink( int fd );
 
+// do no operations on this thread for s seconds
+extern void sleep( int s );
+// release or signal a semaphore
+extern void sem_post( const void* x );
+// lock a semaphore or wait
+extern void sem_wait( const void* x );
+
 #endif

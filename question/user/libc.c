@@ -151,7 +151,7 @@ void nice( int pid, int x ) {
 int shm_open( uint32_t size ) {
   int r;
 
-  asm volatile( "mov r0, %1 \n" // assign r0 = size
+  asm volatile( "mov r0, %2 \n" // assign r0 = size
                 "svc %1     \n" // make system call SYS_SHM_OPEN
                 "mov %0, r0 \n" // assign r  = r0 
               : "=r" (r) 
@@ -164,7 +164,7 @@ int shm_open( uint32_t size ) {
 void* mmap( int fd ) {
   int r;
 
-  asm volatile( "mov r0, %1 \n" // assign r0 =   fd
+  asm volatile( "mov r0, %2 \n" // assign r0 =   fd
                 "svc %1     \n" // make system call SYS_MMAP
                 "mov %0, r0 \n" // assign r  = r0 
               : "=r" (r) 
@@ -180,6 +180,44 @@ void shm_unlink( int fd ) {
               :  
               : "I" (SYS_SHM_UNLINK), "r" (fd)
               : "r0" );
+
+  return;
+}
+
+void sleep ( int s ) {
+  for( int i = 0; i < ( s * ( 0x1000000 ) ); i++ ) {
+    asm volatile( "nop" ); // No operation
+  }
+}
+
+void sem_post ( const void * x ) {
+  asm volatile( "ldrex     r1, [ %0 ] \n" // s' = MEM[ &s ]
+                "add   r1, r1, #1     \n" // s' = s'+ 1
+                "strex r2, r1, [ %0 ] \n" // r <= MEM[ &s ] = s'
+                "cmp   r2, #0         \n" //    r ?= 0
+                "bne   sem_post       \n" // if r != 0, retry
+                "dmb                  \n" // memory barrier
+                "bx    lr             \n" // return
+              :
+              :"r" (x)
+              :"r0", "r1", "r2");
+
+  return;
+}
+
+void sem_wait( const void * x ) {
+  asm volatile( "ldrex     r1, [ %0 ] \n" // s' = MEM[ &s ]
+                "cmp   r1, #0         \n" //    s' ?= 0
+                "beq   sem_wait       \n" // if s' == 0, retry
+                "sub   r1, r1, #1     \n" // s' = s'- 1
+                "strex r2, r1, [ %0 ] \n" // r <= MEM[ &s ] = s'
+                "cmp   r2, #0         \n" //    r ?= 0
+                "bne   sem_wait       \n" // if r != 0, retry
+                "dmb                  \n" // memory barrier
+                "bx    lr             \n" // return
+              :
+              :"r" (x)
+              :"r0", "r1", "r2");
 
   return;
 }

@@ -26,6 +26,13 @@ extern void main_console();
 
 region regions[ MAX_SHM ] = { 0 };
 
+pcb_t* get_pcb ( pid_t pid ) {
+  for( int i = 0; i < MAX_PROCS; i++ ) {
+    if( procTab[i].pid == pid ) return &procTab[i];
+  }
+  return NULL;
+}
+
 int get_free_region_index() {
   int i = 0;
   while( regions[ i ].state == OCCUPIED ) { i++; }
@@ -197,6 +204,9 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
 
   switch( id ) {
     case 0x00 : { // 0x00 => yield()
+      PL011_putc( UART0, '[', true );
+      PL011_putc( UART0, 'Y', true );
+      PL011_putc( UART0, ']', true );
       schedule( ctx );
 
       break;
@@ -296,7 +306,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       PL011_putc( UART0, 'K', true );
       PL011_putc( UART0, ']', true );
 
-      pcb_t* target = &procTab( ( pid_t ) ctx->gpr[0] );
+      pcb_t* target = get_pcb( ( pid_t ) ctx->gpr[0] );
       if( target != NULL) {
         memset( executing, 0, sizeof( pcb_t ) );
         target->status = STATUS_TERMINATED;
@@ -313,13 +323,14 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
     
       // Set attributes
       r->fd     = i;
-      r->offset = ( i != 0 ) ? ( regions[ i - 1 ].offset - size ) : ( (uint32_t) ( &shm - size ) );
+      r->offset = ( i != 0 ) ? ( regions[ i - 1 ].offset - size ) : ( ( uint32_t ) ( &shm - size ) );
       r->size   = size;
       r->state  = OCCUPIED;
     
       // Set shared memory region
       memset( ( void* ) r->offset, 0, size );
     
+      // Return fd
       ctx->gpr[0] = i;
       break;
     }

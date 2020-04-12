@@ -34,140 +34,122 @@
 
 */
 
-// Attributes of philosopher
-int id;
-char id_c[ 2 ]; // ID in char form
-p_state state;  
-chopstick* l;
-chopstick* r;
-
-chopstick* chopsticks;      // Chopsticks array
-request (*neighbours)[ 2 ]; // Request array (2D)
-
-// Initially give philosopher the correct amount of chopsticks depending on id
-// Initially make each chopstick dirty
-void set_up_table( int n_fd, int c_fd ) {
-  // Convert ID into char[]
-  itoa( id_c, id );
-
-  // Assign pointers
-  neighbours = ( request (*)[2] ) mmap( n_fd );
-  chopsticks = mmap( c_fd );
-
-  // Set up the table
-  // 1st philosopher has 2 chopsticks, last philosopher has no chopsticks
-  // Every other philosopher has 1 chopstick
-  if( id < ( ( id - 1 ) % PHILOSOPHERS ) ) {
-    l        = &chopsticks[ ( id - 1 ) % PHILOSOPHERS ];
-    l->id    = ( id - 1 ) % PHILOSOPHERS;
-    l->state = DIRTY;
-  }
-  else l = NULL;
-
-  if( id < ( ( id + 1 ) % PHILOSOPHERS ) ) {
-    r        = &chopsticks[ id ];
-    r->id    = id;
-    r->state = DIRTY;
-  }
-  else r = NULL;
+// % is NOT a modulo operator
+int mod( int x, int m ) {
+  int r = x % m;
+  return r < 0 ? ( r + m ) : r;
 }
 
-void check_requests( request (*neighbours)[2] ) {
-  if( neighbours[ id ][ 0 ].state == true ) { // Request from left neighbour
-    if( state != HUNGRY || l->state != CLEAN ) {
-      l->state = CLEAN;
+// While we don't own chopsticks, get chopsticks from others only if they're dirty
+void request( int id, char id_c[2], chopstick* l, chopstick* r ) {
+  while( id != l->owner_id || l->mutex == 1 || id != r->owner_id || r->mutex == 1 ) {
+    if( id != l->owner_id && l->dirty ) {
+      write( STDOUT_FILENO, "Philosopher ", 12 );
+      write( STDOUT_FILENO, id_c, 2 );
+      write( STDOUT_FILENO, " wants left\n", 12 );
 
-      neighbours[ id ][ 0 ].state        = false;
-      neighbours[ id ][ 0 ].chopstick_id = l->id;
+      sem_wait( &l->mutex );
 
-      l = NULL;
+      l->dirty    = false;
+      l->owner_id = id;
+
+      write( STDOUT_FILENO, "Philosopher ", 12 );
+      write( STDOUT_FILENO, id_c, 2 );
+      write( STDOUT_FILENO, " gets left\n", 11 );
     }
-  }
-  if( neighbours[ id ][ 1 ].state == true ) { // Request from right neighbour
-    if( state != HUNGRY || r->state != CLEAN ) {
-      r->state = CLEAN;
 
-      neighbours[ id ][ 1 ].state        = false;
-      neighbours[ id ][ 1 ].chopstick_id = r->id;
+    if( id != r->owner_id && r->dirty ) {
+      write( STDOUT_FILENO, "Philosopher ", 12 );
+      write( STDOUT_FILENO, id_c, 2 );
+      write( STDOUT_FILENO, " wants right\n", 13 );
+      
+      sem_wait( &r->mutex );
 
-      r = NULL;
+      r->dirty    = false;
+      r->owner_id = id;
+
+      write( STDOUT_FILENO, "Philosopher ", 12 );
+      write( STDOUT_FILENO, id_c, 2 );
+      write( STDOUT_FILENO, " gets right\n", 12 );
     }
-  }
-}
-
-void requests( request (*neighbours)[2], chopstick* chopsticks ) {
-  while( 1 ) {
-    check_requests( neighbours );
-
-    // Request neighbours
-    if( l == NULL ) neighbours[ ( id - 1 ) % PHILOSOPHERS ][ 1 ].state = true; // Left neighbour
-    if( r == NULL ) neighbours[ ( id + 1 ) % PHILOSOPHERS ][ 0 ].state = true; // Right neighbour
-
-    if( l != NULL && r != NULL ) break;
-    // else yield();
-
-    // Check if philosopher can take chopsticks
-    if( l == NULL )
-      if( neighbours[ ( id - 1 ) % PHILOSOPHERS ][ 1 ].state == false )
-        l = &chopsticks[ neighbours[ ( id - 1 ) % PHILOSOPHERS ][ 1 ].chopstick_id ];
-    if( r == NULL )
-      if( neighbours[ ( id + 1 ) % PHILOSOPHERS ][ 0 ].state == false )
-        r = &chopsticks[ neighbours[ ( id + 1 ) % PHILOSOPHERS ][ 0 ].chopstick_id ];
   }
 }
 
 // Thread is idle (Can give away resources)
-void thinking( request (*neighbours)[2] ) {
+void thinking( char id_c[2] ) {
   write( STDOUT_FILENO, "Philosopher ", 12 );
   write( STDOUT_FILENO, id_c, 2 );
   write( STDOUT_FILENO, " is thinking\n", 13 );
-  state = THINKING;
 
-  int i = 0;
-  while( i < id ) {
-    check_requests( neighbours );
-    i++;
-  }
+  sleep( atoi( id_c ) + 1 );
 }
 
 // Thread wanting to execute (Needs resources)
-void hungry( request (*neighbours)[2], chopstick* chopsticks ) {
+void hungry( int id, char id_c[2], chopstick* l, chopstick* r ) {
   write( STDOUT_FILENO, "Philosopher ", 12 );
   write( STDOUT_FILENO, id_c, 2 );
-  write( STDOUT_FILENO, " is hungry\n", 10 );
-  state = HUNGRY;
+  write( STDOUT_FILENO, " is hungry\n", 11 );
 
-  requests( neighbours, chopsticks );
+  request( id, id_c, l, r );
 }
 
 // Thread execute (Has resources)
 // Thread defers request while eating
-void eating() {
+void eating( char id_c[2], chopstick* l, chopstick* r ) {
   write( STDOUT_FILENO, "Philosopher ", 12 );
   write( STDOUT_FILENO, id_c, 2 );
-  write( STDOUT_FILENO, " is eating\n", 10 );
-  state = EATING;
+  write( STDOUT_FILENO, " is eating\n", 11 );
 
-  l->state = DIRTY;
-  r->state = DIRTY;
+  sleep( atoi( id_c ) + 1 );
+
+  l->dirty = true;
+  sem_post( &l->mutex );
+  r->dirty = true;
+  sem_post( &r->mutex );
 }
 
 void main_dining() {
-  int c_fd = shm_open( sizeof( chopstick ) *   PHILOSOPHERS       ); // SHM for chopsticks
-  int n_fd = shm_open( sizeof( request   ) * ( PHILOSOPHERS * 2 ) ); // SHM for requests
+  int c_fd = shm_open( sizeof( chopstick ) * PHILOSOPHERS ); // SHM for chopsticks
 
   // Create 16 philosophers
-  for( int i = 0; i < PHILOSOPHERS; i++ ) {
+  for( int i = PHILOSOPHERS - 1; i >= 0; i-- ) {
     if( 0 == fork() ) {
-      id = i;
+      // Attributes of philosopher
+      int id = i;
+      char id_c[ 2 ]; // ID in char form
+      itoa( id_c, id );
+      chopstick* l;
+      chopstick* r;
 
-      set_up_table( n_fd, c_fd );
+      chopstick* chopsticks = mmap( c_fd ); // Chopsticks array
+
+      // Set up the table
+      // 1st philosopher has 2 chopsticks, last philosopher has no chopsticks
+      // Every other philosopher has 1 chopstick
+      int num;
+      num = mod( id - 1, PHILOSOPHERS );
+      l = &chopsticks[ id ];
+      if( id < num ) {
+        l->mutex    = 0;
+        l->owner_id = id;
+        l->dirty    = true;
+      }
+
+      num = mod( id + 1, PHILOSOPHERS );
+      r = &chopsticks[ num ];
+      if( id < num ) {
+        r->mutex    = 0;
+        r->owner_id = id;
+        r->dirty    = true;
+      }
+
+      yield();
 
       // Forever cycle between thinking, hungry and eating.
       while( 1 ) {
-        thinking( neighbours );
-        hungry( neighbours, chopsticks );
-        eating();
+        thinking( id_c );
+        hungry( id, id_c, l, r );
+        eating( id_c, l, r );
       }
     }
   }
