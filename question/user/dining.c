@@ -1,6 +1,7 @@
 #include "dining.h"
 
-/* To solve the Dining Philosophers problem, we will implement the Chandy-Misra solution where:
+/* To solve the Dining Philosophers problem, we will implement the [slightly modified] Chandy-Misra
+   solution where:
    
    1. Each chopstick is always in the possession of one of it's two philosophers.
       Also, a dirty chopstick is always cleaned just before it is given to its other philosopher.
@@ -11,9 +12,9 @@
       (lower neighbor), and marked as "dirty."
 
    3. Thinking.
-      When a philosopher p is thinking, if that philosopher p receives a request for a particular
-      chopstick c from one of that philosopher's neighbors, then p gives the neighbor that
-      chopstick c (after cleaning it).
+      When a philosopher p is thinking, if p receives a request for a particular chopstick c from one
+      of that philosopher's neighbors, then p gives the neighbor c (after cleaning it).
+      [The requester cleans it themselves instead.]
 
    4. Hungry.
       When a philosopher p is preparing to eat, p requests any chopsticks that p doesn't already
@@ -23,14 +24,17 @@
       chopstick (after cleaning it) if it's dirty, and keeps that chopstick for the present if it's
       clean. p defers the requests for already-clean chopsticks (i.e., remembers the clean requests
       for later delivery).
+      [We don't remember the requests for clean chopsticks]
 
    5. Eating.
       A philosopher p may start eating as soon as p has all of p's chopsticks. While eating, all
       requests for chopsticks are deferred, and all chopsticks become dirty.
 
    6. Cleanup.
-      Immediately after eating, a philosopher delivers any chopsticks for which there are deferred
+      Immediately after eating, a philosopher p delivers any chopsticks for which there are deferred
       requests (after cleaning them). That philosopher then proceeds to eat.
+      [No Cleanup stage but this is implemented in Eating. p offers to give away their chopsticks but
+       still owns it.]
 
 */
 
@@ -42,6 +46,7 @@ int mod( int x, int m ) {
 
 // While we don't own chopsticks, get chopsticks from others only if they're dirty
 void request( int id, char id_c[2], chopstick* l, chopstick* r ) {
+  // A philosopher must check if they're the owner of the chopstick (owner_id) and they've locked it (mutex == 0)
   while( id != l->owner_id || l->mutex == 1 || id != r->owner_id || r->mutex == 1 ) {
     if( id != l->owner_id && l->dirty ) {
       write( STDOUT_FILENO, "Philosopher ", 12 );
@@ -95,6 +100,7 @@ void hungry( int id, char id_c[2], chopstick* l, chopstick* r ) {
 
 // Thread execute (Has resources)
 // Thread defers request while eating
+// After eating, they're still the owner of the chopsticks (owner_id) but they can be given away (mutex == 1)
 void eating( char id_c[2], chopstick* l, chopstick* r ) {
   write( STDOUT_FILENO, "Philosopher ", 12 );
   write( STDOUT_FILENO, id_c, 2 );
@@ -125,7 +131,7 @@ void main_dining() {
 
       // Set up the table
       // 1st philosopher has 2 chopsticks, last philosopher has no chopsticks
-      // Every other philosopher has 1 chopstick
+      // Every other philosopher has 1 chopstick on their right
       int num;
       num = mod( id - 1, PHILOSOPHERS );
       l = &chopsticks[ id ];
@@ -143,6 +149,7 @@ void main_dining() {
         r->dirty    = true;
       }
 
+      // Make sure every philosopher sets up their part of the table before dining
       yield();
 
       // Forever cycle between thinking, hungry and eating.

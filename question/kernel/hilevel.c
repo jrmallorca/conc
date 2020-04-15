@@ -9,16 +9,6 @@
 
 // nc 127.0.0.1 1235
 
-/* We assume there will be two user processes, stemming from execution of the 
- * two user programs P3 and P4, and can therefore
- * 
- * - allocate a fixed-size process table (of PCBs), and then maintain an index 
- *   into it to keep track of the currently executing process, and
- * - employ a fixed-case of round-robin scheduling: no more processes can be 
- *   created, and neither can be terminated, so assume both are always ready
- *   to execute.
- */
-
 pcb_t procTab[ MAX_PROCS ]; pcb_t* executing = NULL;
 
 extern uint32_t tos_procs;
@@ -79,7 +69,7 @@ void schedule( ctx_t* ctx ) {
   int max_priority = 0;
 
   // Find process with highest priority and assign it as next process
-  for(int i = 0; i < MAX_PROCS; i++) {
+  for( int i = 0; i < MAX_PROCS; i++ ) {
     if( procTab[ i ].status != STATUS_INVALID && procTab[ i ].status != STATUS_TERMINATED ) {
       procTab[ i ].priority = procTab[i].b_priority + procTab[i].age;
 
@@ -91,7 +81,7 @@ void schedule( ctx_t* ctx ) {
   }
 
   // Increase age of other processes in the ready queue
-  for(int i = 0; i < MAX_PROCS; i++) {
+  for( int i = 0; i < MAX_PROCS; i++ ) {
     if( procTab[ i ].status != STATUS_INVALID && procTab[ i ].status != STATUS_TERMINATED ) {
       if( next->pid != procTab[i].pid ) procTab[i].age++;
       else procTab[i].age = 0;
@@ -301,14 +291,14 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
 
       break;
     }
-    case 0x06 : { // 0x06 => kill( pid )
+    case 0x06 : { // 0x06 => kill( pid, x )
       PL011_putc( UART0, '[', true );
       PL011_putc( UART0, 'K', true );
       PL011_putc( UART0, ']', true );
 
       pcb_t* target = get_pcb( ( pid_t ) ctx->gpr[0] );
-      if( target != NULL) {
-        memset( executing, 0, sizeof( pcb_t ) );
+      if( target != NULL ) {
+        memset( target, 0, sizeof( pcb_t ) );
         target->status = STATUS_TERMINATED;
       }
 
