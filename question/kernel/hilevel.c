@@ -16,6 +16,9 @@ extern void main_console();
 
 region regions[ MAX_SHM ] = { 0 };
 
+// -------------------------------------------------------------------------------------------------------------------
+// Getters
+
 pcb_t* get_pcb ( pid_t pid ) {
   for( int i = 0; i < MAX_PROCS; i++ ) {
     if( procTab[i].pid == pid ) return &procTab[i];
@@ -24,10 +27,11 @@ pcb_t* get_pcb ( pid_t pid ) {
 }
 
 int get_free_region_index() {
-  int i = 0;
-  while( regions[ i ].state == OCCUPIED ) { i++; }
+  for( int i = 0; i < MAX_SHM; i++ ) {
+    if( regions[ i ].state == UNOCCUPIED ) return i;
+  }
 
-  return i;
+  return -1; // If no free PCB
 } 
 
 // Get the next free PCB in process table
@@ -38,6 +42,9 @@ int get_free_pcb_index() {
 
   return -1; // If no free PCB
 }
+
+// -------------------------------------------------------------------------------------------------------------------
+// Scheduling
 
 void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
   char prev_pid = '?', next_pid = '?';
@@ -66,16 +73,17 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
 
 void schedule( ctx_t* ctx ) {
   pcb_t* next;
+  int priority;
   int max_priority = 0;
 
   // Find process with highest priority and assign it as next process
   for( int i = 0; i < MAX_PROCS; i++ ) {
     if( procTab[ i ].status != STATUS_INVALID && procTab[ i ].status != STATUS_TERMINATED ) {
-      procTab[ i ].priority = procTab[i].b_priority + procTab[i].age;
+      priority = procTab[i].b_priority + procTab[i].age; // base priority + age
 
-      if( max_priority <= procTab[ i ].priority ) {
+      if( max_priority <= priority ) {
         next = &procTab[ i ];
-        max_priority = procTab[ i ].priority;
+        max_priority = priority;
       }
     }
   }
@@ -138,7 +146,6 @@ void hilevel_handler_rst( ctx_t* ctx ) {
   procTab[ 0 ].ctx.sp     = procTab[ 0 ].tos;
   procTab[ 0 ].b_priority = 1;
   procTab[ 0 ].age        = 0;
-  procTab[ 0 ].priority   = 1;
 
   /* Invalidate all other entries in the process table, so it's clear they are not
    * representing valid (i.e., active) processes.
@@ -251,7 +258,6 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       child_pcb->ctx.sp     = child_pcb->tos - offset;
       child_pcb->b_priority = 1;
       child_pcb->age        = 0;
-      child_pcb->priority   = 1;
 
       // Set return values
       ctx->gpr[0]           = child_pcb->pid; // Return value for parent
@@ -296,7 +302,9 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       PL011_putc( UART0, 'K', true );
       PL011_putc( UART0, ']', true );
 
-      pcb_t* target = get_pcb( ( pid_t ) ctx->gpr[0] );
+      pid_t pid = ( pid_t )( ctx->gpr[ 0 ] );
+
+      pcb_t* target = get_pcb( pid );
       if( target != NULL ) {
         memset( target, 0, sizeof( pcb_t ) );
         target->status = STATUS_TERMINATED;
@@ -304,16 +312,31 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
 
       break;
     }
+    case 0x07 : { // 0x07 => nice( pid, x )
+      PL011_putc( UART0, '[', true );
+      PL011_putc( UART0, 'P', true );
+      PL011_putc( UART0, ']', true );
+
+      pid_t pid = ( pid_t )( ctx->gpr[ 0 ] );
+      int     x = (int    )( ctx->gpr[ 1 ] );
+
+      pcb_t* target = get_pcb( pid );
+      if( target != NULL ) target->b_priority = x;
+    }
     case 0x08 : { // 0x08 => shm_open( uint32_t size )
       uint32_t size = ( uint32_t )( ctx->gpr[ 0 ] );
 
       // Find unoccupied region
-      int i = get_free_region_index();
-      region* r = &regions[ i ];
+      int idx = get_free_region_index();
+      if( idx == -1 ) { // If there's no free shm left, return
+        ctx->gpr[0] = -1;
+        break;
+      }
+      region* r = &regions[ idx ];
     
       // Set attributes
-      r->fd     = i;
-      r->offset = ( i != 0 ) ? ( regions[ i - 1 ].offset - size ) : ( ( uint32_t ) ( &shm - size ) );
+      r->fd     = idx;
+      r->offset = ( idx != 0 ) ? ( regions[ idx - 1 ].offset - size ) : ( ( uint32_t ) ( &shm - size ) );
       r->size   = size;
       r->state  = OCCUPIED;
     
@@ -321,7 +344,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       memset( ( void* ) r->offset, 0, size );
     
       // Return fd
-      ctx->gpr[0] = i;
+      ctx->gpr[0] = idx;
       break;
     }
     case 0x09 : { // 0x09 => mmap( int fd )

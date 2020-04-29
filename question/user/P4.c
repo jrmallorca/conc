@@ -31,6 +31,8 @@ void main_P4() {
         uint32_t r = gcd( x, y ); 
       }
     }
+
+    nice( 0, 10 );
   }
 
   exit( EXIT_SUCCESS );

@@ -83,7 +83,6 @@ typedef struct {
      ctx_t        ctx; // execution context
        int b_priority; // base priority
        int        age; // time spent waiting since last executed
-       int   priority; // base priority + age
 } pcb_t;
 
 #endif
