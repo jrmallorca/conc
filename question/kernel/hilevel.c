@@ -7,8 +7,6 @@
 
 #include "hilevel.h"
 
-// nc 127.0.0.1 1235
-
 pcb_t procTab[ MAX_PROCS ]; pcb_t* executing = NULL;
 
 extern uint32_t tos_procs;
@@ -71,6 +69,7 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
   return;
 }
 
+// Using priority+age-based scheduling
 void schedule( ctx_t* ctx ) {
   pcb_t* next;
   int priority;
@@ -88,7 +87,7 @@ void schedule( ctx_t* ctx ) {
     }
   }
 
-  // Increase age of other processes in the ready queue
+  // Increment age of other processes in the ready queue
   for( int i = 0; i < MAX_PROCS; i++ ) {
     if( procTab[ i ].status != STATUS_INVALID && procTab[ i ].status != STATUS_TERMINATED ) {
       if( next->pid != procTab[i].pid ) procTab[i].age++;
@@ -155,7 +154,7 @@ void hilevel_handler_rst( ctx_t* ctx ) {
     procTab[ i ].status = STATUS_INVALID;
   }
 
-  /* Once the PCBs are initialised, we arbitrarily select the 0-th PCB to be
+  /* Once the PCBs are initialised, we select the 0-th PCB (console) to be
    * executed: there is no need to preserve the execution context, since it
    * is invalid on reset (i.e., no process was previously executing).
    */
@@ -204,6 +203,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       PL011_putc( UART0, '[', true );
       PL011_putc( UART0, 'Y', true );
       PL011_putc( UART0, ']', true );
+
       schedule( ctx );
 
       break;
@@ -235,9 +235,6 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
         break;
       }
       pcb_t* child_pcb = &procTab[ idx ];
-
-      // Reset contents of PCB
-      memset( child_pcb, 0, sizeof( pcb_t ) );
 
       // Copy context from parent PCB to child PCB
       memcpy( &child_pcb->ctx, ctx, sizeof( ctx_t ) );
@@ -273,7 +270,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       PL011_putc( UART0, 'T', true );
       PL011_putc( UART0, ']', true );
 
-      // Reset contents of PCB
+      // Reset contents of PCB, indicate termination and re-schedule
       memset( executing, 0, sizeof( pcb_t ) );
       executing->status = STATUS_TERMINATED;
       schedule( ctx );
@@ -288,7 +285,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       PL011_putc( UART0, 'C', true );
       PL011_putc( UART0, ']', true );
 
-      // Entry point of process (E.g. &main_P3)
+      // Get entry point of process (E.g. &main_P3)
       uint32_t addr = ( uint32_t )( ctx->gpr[ 0 ] );
 
       // Set attributes
@@ -304,6 +301,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
 
       pid_t pid = ( pid_t )( ctx->gpr[ 0 ] );
 
+      // Get the PCB, reset it and indicate termination
       pcb_t* target = get_pcb( pid );
       if( target != NULL ) {
         memset( target, 0, sizeof( pcb_t ) );
@@ -320,6 +318,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       pid_t pid = ( pid_t )( ctx->gpr[ 0 ] );
       int     x = (int    )( ctx->gpr[ 1 ] );
 
+      // Get the PCB and set base priority to x
       pcb_t* target = get_pcb( pid );
       if( target != NULL ) target->b_priority = x;
     }
@@ -341,7 +340,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
       r->state  = OCCUPIED;
     
       // Set shared memory region
-      memset( ( void* ) r->offset, 0, size );
+      memset( ( void* )( r->offset ), 0, size );
     
       // Return fd
       ctx->gpr[0] = idx;
@@ -349,12 +348,18 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id ) {
     }
     case 0x09 : { // 0x09 => mmap( int fd )
       int fd = ( int )( ctx->gpr[ 0 ] );
+
+      // Return a pointer to the shm region
       ctx->gpr[0] = regions[ fd ].offset;
+
       break;
     }
     case 0x0A : { // 0x0A => shm_unlink( int fd )
       int fd = ( int )( ctx->gpr[ 0 ] );
-      memset( ( void* ) regions[ fd ].offset, 0, regions[ fd ].size );
+
+      // Reset contents of shm region
+      memset( ( void* )( regions[ fd ].offset ), 0, regions[ fd ].size );
+
       break;
     }
 

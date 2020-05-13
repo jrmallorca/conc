@@ -13,9 +13,9 @@
 
 // Resource
 typedef struct {
-  int owner_id;
-  bool dirty;
-  int mutex;
+  int owner_id; // ID of philosopher
+  bool dirty;   // cleanliness of chopstick (resource used or not)
+  int mutex;    // lock for chopstick
 } chopstick;
 
 #endif

@@ -48,13 +48,15 @@ int mod( int x, int m ) {
 void request( int id, char id_c[2], chopstick* l, chopstick* r ) {
   // A philosopher must check if they're the owner of the chopstick (owner_id) and they've locked it (mutex == 0)
   while( id != l->owner_id || l->mutex == 1 || id != r->owner_id || r->mutex == 1 ) {
-    if( id != l->owner_id && l->dirty ) {
+    if( id != l->owner_id && l->dirty ) { // If not owner and not locked in
       write( STDOUT_FILENO, "Philosopher ", 12 );
       write( STDOUT_FILENO, id_c, 2 );
       write( STDOUT_FILENO, " wants left\n", 12 );
 
+      // Wait until chopstick available to take
       sem_wait( &l->mutex );
 
+      // Clean chopstick and set owner to this philosopher
       l->dirty    = false;
       l->owner_id = id;
 
@@ -68,8 +70,10 @@ void request( int id, char id_c[2], chopstick* l, chopstick* r ) {
       write( STDOUT_FILENO, id_c, 2 );
       write( STDOUT_FILENO, " wants right\n", 13 );
       
+      // Wait until chopstick available to take
       sem_wait( &r->mutex );
 
+      // Clean chopstick and set owner to this philosopher
       r->dirty    = false;
       r->owner_id = id;
 
@@ -86,6 +90,7 @@ void thinking( char id_c[2] ) {
   write( STDOUT_FILENO, id_c, 2 );
   write( STDOUT_FILENO, " is thinking\n", 13 );
 
+  // "Think"
   sleep( atoi( id_c ) + 1 );
 }
 
@@ -95,6 +100,7 @@ void hungry( int id, char id_c[2], chopstick* l, chopstick* r ) {
   write( STDOUT_FILENO, id_c, 2 );
   write( STDOUT_FILENO, " is hungry\n", 11 );
 
+  // Request for chopsticks (resources) to eat
   request( id, id_c, l, r );
 }
 
@@ -106,8 +112,10 @@ void eating( char id_c[2], chopstick* l, chopstick* r ) {
   write( STDOUT_FILENO, id_c, 2 );
   write( STDOUT_FILENO, " is eating\n", 11 );
 
+  // "Eat"
   sleep( atoi( id_c ) + 1 );
 
+  // Set chopsticks as dirty and indicate to neighbours the chopsticks can be taken from this philosopher
   l->dirty = true;
   sem_post( &l->mutex );
   r->dirty = true;
@@ -115,7 +123,8 @@ void eating( char id_c[2], chopstick* l, chopstick* r ) {
 }
 
 void main_dining() {
-  int c_fd = shm_open( sizeof( chopstick ) * PHILOSOPHERS ); // SHM for chopsticks
+  // Open a shm region for chopsticks
+  int c_fd = shm_open( sizeof( chopstick ) * PHILOSOPHERS );
 
   // Create 16 philosophers
   for( int i = PHILOSOPHERS - 1; i >= 0; i-- ) {

@@ -44,16 +44,16 @@ extern uint32_t shm; // Address to shared memory
 
 #define MAX_SHM 20
 
-typedef enum {
+typedef enum { // Vacancy status of shm region
   UNOCCUPIED,
   OCCUPIED
 } vacancy;
 
 typedef struct {
-  int fd;
-  uint32_t offset;
-  uint32_t size;
-  vacancy state;
+  int          fd; // file descriptor
+  uint32_t offset; // bottom of shm region
+  uint32_t   size; // size of shm region
+  vacancy   state; // region vacancy
 } region;
 
 #define MAX_PROCS 20
