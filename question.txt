@@ -71,8 +71,27 @@ Any other documentation, notes or comments that you think are important or
 might be easy to overlook (e.g., a subtle issue or technique in associated
 source code) should go here:
 
-For the dining philosophers, the main goal of philosophers correctly sharing
-their chopsticks has been achieved; however, there isn't a way to close the
-shared memory region when killing all the philosopher processes.
+For Stage 1a, the priority+age-based scheduling algorithm was chosen as it
+still allows for the user to be able to interact using the console, rather
+than focusing purely on processes. We also have a number of programs which
+run forever until killed, making FCFS and SJF inappropriate for use. Other
+than program P6.c, which gives the console a base priority of 10, there is
+no process that utilises the nice() function.
+
+For Stage 2b, the Chandy/Misra solution was chosen as it allows for the most
+concurrency out of the three known solutions, as well as solving the problem
+of starvation; each philosopher is guaranteed to eventually 'eat'. Labelling
+chopsticks as clean/dirty enables giving preference to starving philosophers
+while giving a disadvantage to those who have just ate.
+
+Each process has a different time of finishing their thinking and eating
+phases, with philosopher 0 being the fastest and the others eventually
+becoming slower. Therefore, the output will gradually look more inactive
+until philosopher 15 has finished eating; once finished, it will be more
+active. This cycle repeats until the kernel is terminated. 
+
+The main goal of philosophers correctly sharing their chopsticks has been
+achieved; however, there isn't a way to close theshared memory region when
+killing all the philosopher processes.
 
 -------------------------------------------------------------------------------
